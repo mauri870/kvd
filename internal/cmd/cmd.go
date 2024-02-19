@@ -13,10 +13,9 @@ import (
 	"github.com/mauri870/kvd/internal/respserver"
 )
 
-func Run(ctx context.Context, rawArgs []string) error {
-	lvl := slog.LevelInfo
-	slog.SetLogLoggerLevel(lvl)
-	slog.Info("Log level set", "level", lvl)
+func Run(ctx context.Context, logLvl slog.Level, rawArgs []string) error {
+	slog.SetLogLoggerLevel(logLvl)
+	slog.Info("Log level set", "level", logLvl)
 
 	// flag parsing
 	var addr string

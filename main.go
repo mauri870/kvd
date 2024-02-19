@@ -13,7 +13,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	if err := cmd.Run(ctx, os.Args[1:]); err != nil {
+	if err := cmd.Run(ctx, slog.LevelInfo, os.Args[1:]); err != nil {
 		slog.Error("failed to run command", "error", err)
 		os.Exit(1)
 	}
