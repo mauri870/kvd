@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/mauri870/kvd/internal/kvstore"
 	"github.com/mauri870/kvd/internal/raftstore"
@@ -94,7 +93,7 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 	slog.Debug("Executing command", "raw", cmd.Raw)
 
 	args := cmd.Args
-	cmdname := toString(args[0])
+	cmdname := string(args[0])
 
 	switch cmdname {
 	case "PING":
@@ -138,7 +137,7 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 			return fmt.Errorf("wrong number of arguments for 'join' command")
 		}
 		slog.Info("Joining node", "nodeid", args[1], "address", args[2])
-		if err := s.store.Join(toString(args[1]), toString(args[2])); err != nil {
+		if err := s.store.Join(string(args[1]), string(args[2])); err != nil {
 			return fmt.Errorf("failed to join node: %w", err)
 		}
 		conn.WriteString("OK")
@@ -148,7 +147,7 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 			return fmt.Errorf("wrong number of arguments for 'LEAVE' command")
 		}
 		slog.Info("Removing node", "nodeid", args[1])
-		if err := s.store.Leave(toString(args[1])); err != nil {
+		if err := s.store.Leave(string(args[1])); err != nil {
 			return fmt.Errorf("failed to join node: %w", err)
 		}
 		conn.WriteString("OK")
@@ -158,12 +157,12 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 			return fmt.Errorf("wrong number of arguments for 'config' command")
 		}
 
-		if toString(args[1]) == "SET" {
+		if string(args[1]) == "SET" {
 			return fmt.Errorf("unknown subcommand '%s' for 'config'", args[1])
 		}
 
 		// only the basics for the redis-cli to work
-		switch toString(args[2]) {
+		switch string(args[2]) {
 		case "save":
 			conn.WriteArray(2)
 			conn.WriteBulkString("save")
@@ -181,11 +180,4 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 	}
 
 	return nil
-}
-
-func toString(b []byte) string {
-	if len(b) == 0 {
-		return ""
-	}
-	return unsafe.String(&b[0], len(b))
 }
