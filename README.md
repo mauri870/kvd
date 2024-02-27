@@ -3,7 +3,7 @@
 kvd is a distributed key-value store that uses the redis RESP protocol.
 It achieves fault tolerance and high availability by using the Raft consensus algorithm.
 
-The backing storage should be pluggable, but currently it is backed by [etcd-io/bbolt](https://github.com/etcd-io/bbolt).
+The backing storage is pluggable, but currently it is backed by [etcd-io/bbolt](https://github.com/etcd-io/bbolt).
 
 Only a subset of the RESP protocol is implemented, enough that you can toy with `redis-cli` and `redis-benchmark` with basic commands.
 
@@ -18,7 +18,7 @@ go build .
 ./kvd -addr localhost:6379 -raft-addr localhost:19000 ./node0
 ```
 
-> Raft will store data in the node0 directory.
+> Raft stores data in the `node0` directory.
 
 The following subset of the Redis RESP protocol is implemented:
 
@@ -67,13 +67,12 @@ With the cluster started, you must join the nodes to the cluster. You can do tha
 ```bash
 $ redis-cli JOIN node1 localhost:19001
 $ redis-cli JOIN node2 localhost:19002
-$ redis-cli JOIN node3 localhost:19003
 ```
 
 All writes must be send to the leader, reads can be distributed between
 nodes. For a three node cluster, the cluster can recover from one node
 failure. If the leader node fails, the remaining nodes
-will try to start an ellection as soon as 3 nodes are available. While a leader is elected, reads will still
+will try to start an election as soon as 3 nodes are available. While a leader is elected, reads will still
 continue to be processed.
 
 ```bash

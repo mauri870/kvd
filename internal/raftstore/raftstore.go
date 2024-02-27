@@ -196,6 +196,30 @@ func (s *Store) Join(nodeID, addr string) error {
 	return nil
 }
 
+// Leave removes a node from the raft store
+func (s *Store) Leave(nodeID string) error {
+	// Only the leader can remove nodes
+	if s.raft.State() != raft.Leader {
+		return ErrNotALeader
+	}
+
+	configFuture := s.raft.GetConfiguration()
+	if err := configFuture.Error(); err != nil {
+		return fmt.Errorf("failed to get raft configuration: %w", err)
+	}
+
+	for _, srv := range configFuture.Configuration().Servers {
+		if srv.ID == raft.ServerID(nodeID) {
+			future := s.raft.RemoveServer(srv.ID, 0, 0)
+			if err := future.Error(); err != nil {
+				return fmt.Errorf("error removing existing node %s : %w", nodeID, err)
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
 // fsm is the finite state machine that the Raft subsystem will use to
 // apply log entries to the key-value store.
 type fsm Store

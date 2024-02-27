@@ -143,6 +143,16 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 		}
 		conn.WriteString("OK")
 		conn.Close()
+	case "LEAVE":
+		if len(cmd.Args) < 1 {
+			return fmt.Errorf("wrong number of arguments for 'LEAVE' command")
+		}
+		slog.Info("Removing node", "nodeid", args[1])
+		if err := s.store.Leave(toString(args[1])); err != nil {
+			return fmt.Errorf("failed to join node: %w", err)
+		}
+		conn.WriteString("OK")
+		conn.Close()
 	case "CONFIG":
 		if len(cmd.Args) < 3 {
 			return fmt.Errorf("wrong number of arguments for 'config' command")
