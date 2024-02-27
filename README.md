@@ -67,6 +67,9 @@ With the cluster started, you must join the nodes to the cluster. You can do tha
 ```bash
 $ redis-cli JOIN node1 localhost:19001
 $ redis-cli JOIN node2 localhost:19002
+
+# leave the cluster
+$ redis-cli LEAVE node2
 ```
 
 All writes must be send to the leader, reads can be distributed between
@@ -82,4 +85,24 @@ OK
 
 # read from any node
 $ redis-cli -p 6380 GET a
+```
+## HTTP API
+
+A simple http api is also available, you can use it to interact with the cluster:
+
+```bash
+# set a key
+curl -XPOST localhost:8080/kv -d '{"key": "a", "value": "abc"}'
+
+# get a key
+curl -XGET localhost:8080/kv/a
+
+# delete a key
+curl -XDELETE localhost:8080/kv/a
+
+# join a node
+curl -XPOST localhost:8080/kv/join -d '{"nodeID": "node2", "addr": "localhost:19002"}'
+
+# leave the cluster
+curl -XPOST localhost:8080/kv/leave/node2
 ```

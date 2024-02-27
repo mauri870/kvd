@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mauri870/kvd/internal/httpserver"
 	"github.com/mauri870/kvd/internal/kvstore"
 	"github.com/mauri870/kvd/internal/raftstore"
 	"github.com/mauri870/kvd/internal/respserver"
@@ -19,9 +20,11 @@ func Run(ctx context.Context, logLvl slog.Level, rawArgs []string) error {
 
 	// flag parsing
 	var addr string
+	var httpAddr string
 	var raftAddr string
 	var inmem bool
 	flag.StringVar(&addr, "addr", "localhost:6379", "RESP server address")
+	flag.StringVar(&httpAddr, "http-addr", "localhost:8080", "HTTP server address")
 	flag.StringVar(&raftAddr, "raft-addr", "localhost:19000", "Raft server address")
 	flag.BoolVar(&inmem, "inmem", false, "use in-memory storage for Raft")
 	flag.CommandLine.Parse(rawArgs)
@@ -57,7 +60,15 @@ func Run(ctx context.Context, logLvl slog.Level, rawArgs []string) error {
 	}
 
 	slog.Info("Starting RESP server", "addr", addr)
-	server.Run(ctx, addr, 5*time.Second)
+	go server.Run(ctx, addr, 5*time.Second)
+
+	httpServer, err := httpserver.New(store)
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP server: %w", err)
+	}
+
+	slog.Info("Starting HTTP server", "addr", httpAddr)
+	httpServer.Run(ctx, httpAddr)
 
 	return nil
 }

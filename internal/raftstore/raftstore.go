@@ -15,7 +15,8 @@ import (
 )
 
 var (
-	ErrNotALeader = fmt.Errorf("not a leader")
+	ErrNotALeader   = fmt.Errorf("not a leader")
+	ErrNodeNotFound = fmt.Errorf("node not found")
 )
 
 type Store struct {
@@ -217,7 +218,7 @@ func (s *Store) Leave(nodeID string) error {
 			return nil
 		}
 	}
-	return nil
+	return ErrNodeNotFound
 }
 
 // fsm is the finite state machine that the Raft subsystem will use to

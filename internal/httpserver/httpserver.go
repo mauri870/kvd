@@ -27,6 +27,9 @@ func New(store *raftstore.Store) (*Server, error) {
 	s.mux.HandleFunc("/kv", handleErr(s.handleKvSet)).Methods("POST")
 	s.mux.HandleFunc("/kv/{key}", handleErr(s.handleKvDelete)).Methods("DELETE")
 
+	s.mux.HandleFunc("/kv/join", handleErr(s.handleKvJoin)).Methods("POST")
+	s.mux.HandleFunc("/kv/leave/{nodeID}", handleErr(s.handleKvLeave)).Methods("POST")
+
 	return s, nil
 }
 
@@ -62,21 +65,33 @@ func handleErr(f func(http.ResponseWriter, *http.Request) error) http.HandlerFun
 
 		slog.Debug("http request failed", "error", err)
 
+		type httpError struct {
+			Error string `json:"error"`
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		var errStr string
 		switch {
 		case errors.Is(err, kvstore.ErrKeyNotFound):
-			http.Error(w, "key not found", http.StatusNotFound)
+			errStr = err.Error()
 		case errors.Is(err, raftstore.ErrNotALeader):
-			http.Error(w, "not a leader", http.StatusServiceUnavailable)
+			errStr = err.Error()
+		case errors.Is(err, raftstore.ErrNodeNotFound):
+			errStr = err.Error()
 		default:
 			slog.Warn("unhandled error", "error", err)
-			http.Error(w, "something went wrong", http.StatusInternalServerError)
+			errStr = "something went wrong"
 		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(httpError{Error: errStr})
 	}
 }
 
 type kvPair struct {
-	Key   []byte `json:"key,omitempty"`
-	Value []byte `json:"value,omitempty"`
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
 }
 
 func (s *Server) handleKvGet(w http.ResponseWriter, r *http.Request) error {
@@ -88,20 +103,17 @@ func (s *Server) handleKvGet(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return json.NewEncoder(w).Encode(kvPair{Key: []byte(key), Value: value})
+	return json.NewEncoder(w).Encode(kvPair{Key: key, Value: string(value)})
 }
 
 func (s *Server) handleKvSet(w http.ResponseWriter, r *http.Request) error {
-	vars := mux.Vars(r)
-	key := vars["key"]
-
 	var kv kvPair
 	err := json.NewDecoder(r.Body).Decode(&kv)
 	if err != nil {
 		return err
 	}
 
-	err = s.store.Set([]byte(key), kv.Value)
+	err = s.store.Set([]byte(kv.Key), []byte(kv.Value))
 	if err != nil {
 		return err
 	}
@@ -115,6 +127,40 @@ func (s *Server) handleKvDelete(w http.ResponseWriter, r *http.Request) error {
 	key := vars["key"]
 
 	err := s.store.Delete([]byte(key))
+	if err != nil {
+		return err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+type kvJoin struct {
+	NodeID string `json:"nodeID"`
+	Addr   string `json:"addr"`
+}
+
+func (s *Server) handleKvJoin(w http.ResponseWriter, r *http.Request) error {
+	var payload kvJoin
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		return err
+	}
+
+	err = s.store.Join(payload.NodeID, payload.Addr)
+	if err != nil {
+		return err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (s *Server) handleKvLeave(w http.ResponseWriter, r *http.Request) error {
+	vars := mux.Vars(r)
+	nodeID := vars["nodeID"]
+
+	err := s.store.Leave(nodeID)
 	if err != nil {
 		return err
 	}
