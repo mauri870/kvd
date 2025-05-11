@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
-	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/mauri870/kvd/internal/kvstore"
+	raftsqlite "github.com/mauri870/raft-sqlite"
 )
 
 var (
@@ -98,9 +98,7 @@ func (s *Store) createRaftStore() (raft.LogStore, raft.StableStore, error) {
 	}
 
 	// in disk
-	store, err := raftboltdb.New(raftboltdb.Options{
-		Path: filepath.Join(s.dir, "raft.db"),
-	})
+	store, err := raftsqlite.NewStore(filepath.Join(s.dir, "raft.db"))
 	return store, store, err
 }
 
