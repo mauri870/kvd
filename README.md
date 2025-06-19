@@ -86,6 +86,7 @@ OK
 # read from any node
 $ redis-cli -p 6380 GET a
 ```
+
 ## HTTP API
 
 A simple http api is also available, you can use it to interact with the cluster:
