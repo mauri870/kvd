@@ -50,7 +50,7 @@ $ redis-benchmark PING
 
 ## Performance
 
-This is a toy project, so performance is not a really a concern.  As usual with Raft clusters, writes must be processed by the leader node and go trough the consensus mechanism so it is bottlenecked by network and disk/io.
+This is a toy project, so performance is not a really a concern. As usual with Raft clusters, writes must be processed by the leader node and go trough the consensus mechanism so it is bottlenecked by network and disk/io.
 
 With write operations it can achieve around ~500 ops/sec in a 3 node cluster. For reads, around ~160k ops/sec per node. Since reads scale with the cluster size, your read throughput can be multiplied by the number of nodes in the cluster.
 
@@ -59,7 +59,7 @@ With write operations it can achieve around ~500 ops/sec in a 3 node cluster. Fo
 A goreman Procfile is included to start a 3-node cluster. You can start it with:
 
 ```bash
-$ goreman start
+$ go tool goreman start
 ```
 
 With the cluster started, you must join the nodes to the cluster. You can do that by sending a `JOIN` command to the leader node:
