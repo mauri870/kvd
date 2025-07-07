@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"time"
 
 	"github.com/mauri870/kvd/internal/httpserver"
@@ -19,12 +20,42 @@ func Run(ctx context.Context, logger *zap.Logger, rawArgs []string) error {
 	var addr string
 	var httpAddr string
 	var raftAddr string
+	var cpuprofile, memprofile string
 	var inmem bool
 	flag.StringVar(&addr, "addr", "localhost:6379", "RESP server address")
 	flag.StringVar(&httpAddr, "http-addr", "localhost:8080", "HTTP server address")
 	flag.StringVar(&raftAddr, "raft-addr", "localhost:19000", "Raft server address")
 	flag.BoolVar(&inmem, "inmem", false, "use in-memory storage for Raft")
+	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to file")
+	flag.StringVar(&memprofile, "memprofile", "", "write heap memory profile to file")
 	flag.CommandLine.Parse(rawArgs)
+
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			return fmt.Errorf("failed to create cpu profile file: %w", err)
+		}
+		defer f.Close()
+
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+		logger.Info("CPU profiling enabled", zap.String("file", cpuprofile))
+	}
+
+	defer func() {
+		if memprofile == "" {
+			return
+		}
+
+		f, err := os.Create(memprofile)
+		if err != nil {
+			logger.Error("Failed to create memory profile file", zap.Error(err))
+			return
+		}
+		defer f.Close()
+		pprof.WriteHeapProfile(f)
+		logger.Info("Memory profiling enabled", zap.String("file", memprofile))
+	}()
 
 	// get the remaining arguments
 	args := flag.Args()
