@@ -7,5 +7,5 @@ test:
 	go test -v ./...
 
 clean:
-	rm ./kvd
-	rm -r ./node*
+	rm ./kvd || true
+	rm -r ./node* || true
