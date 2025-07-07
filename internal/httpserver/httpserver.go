@@ -4,31 +4,36 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/mauri870/kvd/internal/kvstore"
 	"github.com/mauri870/kvd/internal/raftstore"
+	"go.uber.org/zap"
 )
 
 type Server struct {
-	store *raftstore.Store
-	srv   *http.Server
-	mux   *mux.Router
+	store  *raftstore.Store
+	srv    *http.Server
+	mux    *mux.Router
+	logger *zap.Logger
 }
 
 // New creates a new http server.
-func New(store *raftstore.Store) (*Server, error) {
-	s := &Server{store: store, mux: mux.NewRouter()}
+func New(store *raftstore.Store, logger *zap.Logger) (*Server, error) {
+	s := &Server{store: store, mux: mux.NewRouter(), logger: logger}
 
-	s.mux.HandleFunc("/kv/{key}", handleErr(s.handleKvGet)).Methods("GET")
-	s.mux.HandleFunc("/kv", handleErr(s.handleKvSet)).Methods("POST")
-	s.mux.HandleFunc("/kv/{key}", handleErr(s.handleKvDelete)).Methods("DELETE")
+	h := func(f func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
+		return s.handleErr(f)
+	}
 
-	s.mux.HandleFunc("/kv/join", handleErr(s.handleKvJoin)).Methods("POST")
-	s.mux.HandleFunc("/kv/leave/{nodeID}", handleErr(s.handleKvLeave)).Methods("POST")
+	s.mux.HandleFunc("/kv/{key}", h(s.handleKvGet)).Methods("GET")
+	s.mux.HandleFunc("/kv", h(s.handleKvSet)).Methods("POST")
+	s.mux.HandleFunc("/kv/{key}", h(s.handleKvDelete)).Methods("DELETE")
+
+	s.mux.HandleFunc("/kv/join", h(s.handleKvJoin)).Methods("POST")
+	s.mux.HandleFunc("/kv/leave/{nodeID}", h(s.handleKvLeave)).Methods("POST")
 
 	return s, nil
 }
@@ -41,29 +46,29 @@ func (s *Server) Run(ctx context.Context, address string) error {
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("failed to start http server", "error", err)
+			s.logger.Error("failed to start http server", zap.Error(err))
 		}
 	}()
 
 	<-ctx.Done()
 
-	slog.Warn("Shutting down server")
+	s.logger.Warn("Shutting down server")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		slog.Error("server shutdown failed", "error", err)
+		s.logger.Error("server shutdown failed", zap.Error(err))
 	}
 	return nil
 }
 
-func handleErr(f func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+func (s *Server) handleErr(f func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := f(w, r)
 		if err == nil {
 			return
 		}
 
-		slog.Debug("http request failed", "error", err)
+		s.logger.Debug("http request failed", zap.Error(err))
 
 		type httpError struct {
 			Error string `json:"error"`
@@ -80,7 +85,7 @@ func handleErr(f func(http.ResponseWriter, *http.Request) error) http.HandlerFun
 		case errors.Is(err, raftstore.ErrNodeNotFound):
 			errStr = err.Error()
 		default:
-			slog.Warn("unhandled error", "error", err)
+			s.logger.Warn("unhandled error", zap.Error(err))
 			errStr = "something went wrong"
 		}
 

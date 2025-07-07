@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"path/filepath"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/mauri870/kvd/internal/kvstore"
 	raftsqlite "github.com/mauri870/raft-sqlite"
+	"go.uber.org/zap"
 )
 
 var (
@@ -27,9 +27,10 @@ type Store struct {
 	raft        *raft.Raft
 	timeout     time.Duration
 	logWriter   io.Writer
+	logger      *zap.Logger
 }
 
-func New(kv kvstore.KV, dir, address string, inmem bool, logWriter io.Writer) *Store {
+func New(kv kvstore.KV, dir, address string, inmem bool, logWriter io.Writer, logger *zap.Logger) *Store {
 	return &Store{
 		dir:         dir,
 		raftAddress: address,
@@ -37,6 +38,7 @@ func New(kv kvstore.KV, dir, address string, inmem bool, logWriter io.Writer) *S
 		kv:          kv,
 		logWriter:   logWriter,
 		timeout:     10 * time.Second,
+		logger:      logger,
 	}
 }
 
@@ -69,7 +71,7 @@ func (s *Store) Open(enableSingle bool, id string) error {
 		return fmt.Errorf("failed to create raft store: %w", err)
 	}
 
-	slog.Info("Creating Raft instance")
+	s.logger.Info("Creating Raft instance")
 	raftNode, err := raft.NewRaft(config, (*fsm)(s), logStore, stableStore, snapshots, transport)
 	if err != nil {
 		return fmt.Errorf("failed to create new raft instance: %w", err)
@@ -174,7 +176,7 @@ func (s *Store) Join(nodeID, addr string) error {
 		if srv.ID == raft.ServerID(nodeID) || srv.Address == raft.ServerAddress(addr) {
 			// check if the server is already member of the cluster
 			if srv.Address == raft.ServerAddress(addr) && srv.ID == raft.ServerID(nodeID) {
-				slog.Warn("node is already member of cluster, ignoring join request", "nodeID", nodeID, "addr", addr)
+				s.logger.Warn("node is already member of cluster, ignoring join request", zap.String("nodeID", nodeID), zap.String("addr", addr))
 				return nil
 			}
 
@@ -191,7 +193,7 @@ func (s *Store) Join(nodeID, addr string) error {
 	if f.Error() != nil {
 		return f.Error()
 	}
-	slog.Info("node joined the cluster successfully", "nodeID", nodeID, "addr", addr)
+	s.logger.Info("node joined the cluster successfully", zap.String("nodeID", nodeID), zap.String("addr", addr))
 	return nil
 }
 

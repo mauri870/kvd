@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,15 +11,17 @@ import (
 	"github.com/mauri870/kvd/internal/kvstore"
 	"github.com/mauri870/kvd/internal/raftstore"
 	"github.com/tidwall/redcon"
+	"go.uber.org/zap"
 )
 
 type Server struct {
-	store *raftstore.Store
-	srv   *redcon.Server
+	store  *raftstore.Store
+	srv    *redcon.Server
+	logger *zap.Logger
 }
 
-func New(store *raftstore.Store) (*Server, error) {
-	return &Server{store: store}, nil
+func New(store *raftstore.Store, logger *zap.Logger) (*Server, error) {
+	return &Server{store: store, logger: logger}, nil
 }
 
 func (s *Server) Run(ctx context.Context, addr string, idleTimeout time.Duration) error {
@@ -43,12 +44,12 @@ func (s *Server) Run(ctx context.Context, addr string, idleTimeout time.Duration
 				return
 			}
 
-			slog.Debug("Failed to execute command", "err", err)
+			s.logger.Debug("Failed to execute command", zap.Error(err))
 			switch {
 			case errors.Is(err, kvstore.ErrKeyNotFound):
 				conn.WriteNull()
 			default:
-				slog.Error("unhandled error", "err", err)
+				s.logger.Error("unhandled error", zap.Error(err))
 				conn.WriteError("ERR " + err.Error())
 			}
 		},
@@ -75,11 +76,11 @@ func (s *Server) Run(ctx context.Context, addr string, idleTimeout time.Duration
 
 	go func() {
 		<-ctx.Done()
-		slog.Warn("Waiting for open connections to close")
+		s.logger.Warn("Waiting for open connections to close")
 		atomic.StoreInt32(&closed, 1)
 		wg.Wait()
 
-		slog.Warn("Shutting down server")
+		s.logger.Warn("Shutting down server")
 		s.srv.Close()
 	}()
 	if err := s.srv.ListenAndServe(); err != nil {
@@ -90,7 +91,7 @@ func (s *Server) Run(ctx context.Context, addr string, idleTimeout time.Duration
 }
 
 func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
-	slog.Debug("Executing command", "raw", cmd.Raw)
+	s.logger.Debug("Executing command", zap.String("raw", string(cmd.Raw)))
 
 	args := cmd.Args
 	cmdname := string(args[0])
@@ -136,7 +137,7 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 		if len(cmd.Args) < 2 {
 			return fmt.Errorf("wrong number of arguments for 'join' command")
 		}
-		slog.Info("Joining node", "nodeid", args[1], "address", args[2])
+		s.logger.Info("Joining node", zap.String("nodeid", string(args[1])), zap.String("address", string(args[2])))
 		if err := s.store.Join(string(args[1]), string(args[2])); err != nil {
 			return fmt.Errorf("failed to join node: %w", err)
 		}
@@ -146,7 +147,7 @@ func (s *Server) handler(conn redcon.Conn, cmd redcon.Command) error {
 		if len(cmd.Args) < 1 {
 			return fmt.Errorf("wrong number of arguments for 'LEAVE' command")
 		}
-		slog.Info("Removing node", "nodeid", args[1])
+		s.logger.Info("Removing node", zap.String("nodeid", string(args[1])))
 		if err := s.store.Leave(string(args[1])); err != nil {
 			return fmt.Errorf("failed to join node: %w", err)
 		}
